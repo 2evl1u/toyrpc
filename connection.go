@@ -36,6 +36,7 @@ func NewConn(cd codec.Codec) *Connection {
 	return conn
 }
 
+// Handle 接手一个套接字连接
 func (conn *Connection) Handle() {
 	defer func() {
 		_ = conn.Close()

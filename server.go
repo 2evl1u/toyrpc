@@ -8,47 +8,35 @@ import (
 	"toyrpc/codec"
 )
 
-const MagicNumber = 0x3bef5c
-
-type Settings struct {
-	MagicNumber int
-	CodecType   string
-}
-
-var DefaultSettings = &Settings{
-	MagicNumber: MagicNumber,
-	CodecType:   codec.GobType,
-}
-
 type Server struct {
 	network string
 	address string
 }
 
-type Option func(server *Server)
+type SvrOption func(server *Server)
 
-func WithNetwork(network string) Option {
+func WithSvrNetwork(network string) SvrOption {
 	return func(s *Server) {
 		s.network = network
 	}
 }
 
-func WithAddress(address string) Option {
+func WithSvrAddress(address string) SvrOption {
 	return func(s *Server) {
 		s.address = address
 	}
 }
 
 // NewServer 如果不指定网络类型，默认tcp；如果不指定端口，则默认7788端口
-func NewServer(opts ...Option) *Server {
-	s := &Server{
-		network: "tcp",
-		address: ":7788",
+func NewServer(opts ...SvrOption) *Server {
+	svr := &Server{
+		network: DefaultNetwork,
+		address: DefaultAddr,
 	}
 	for _, opt := range opts {
-		opt(s)
+		opt(svr)
 	}
-	return s
+	return svr
 }
 
 func (s *Server) Start() {
