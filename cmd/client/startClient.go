@@ -36,30 +36,48 @@ func main() {
 	// wg.Wait()
 
 	conn, _ := net.Dial("tcp", ":6789")
-	time.Sleep(3 * time.Second)
+	defer conn.Close()
+	time.Sleep(time.Second)
 	json.NewEncoder(conn).Encode(toyrpc.Settings{
 		MagicNumber: toyrpc.MagicNumber,
-		CodecType:   "gob",
+		CodecType:   "json",
 	})
-	maker, _ := codec.Get("gob")
+	maker, _ := codec.Get("json")
 	cd := maker(conn)
-	req := &codec.Request{
-		H: &codec.Header{
-			Service: "TestService",
-			Method:  "TestMethod",
-			SeqId:   123,
-			Err:     nil,
-		},
-		Args:  reflect.ValueOf("this is a call"),
+	go func() {
+		for i := 0; i < 10; i++ {
+			req := &toyrpc.Request{
+				H: &codec.Header{
+					Service: "TestService",
+					Method:  "TestMethod",
+					SeqId:   uint64(i),
+					Err:     "",
+				},
+				Args: reflect.ValueOf(fmt.Sprintf("this is a call %d", i)),
+			}
+			err := cd.Write(req.H, req.Args.Interface())
+			if err != nil {
+				fmt.Printf("Write fail: %s\n", err)
+			}
+		}
+	}()
+	req := &toyrpc.Request{
+		H:     &codec.Header{},
 		Reply: reflect.New(reflect.TypeOf("")),
 	}
-	cd.Write(req.H, req.Args.Interface())
-	fmt.Println(req.Args.String())
-	cd.ReadHeader(req.H)
-	err := cd.ReadBody(req.Reply.Interface())
-	if err != nil {
-		fmt.Println(err)
+	for {
+		err := cd.ReadHeader(req.H)
+		if err != nil {
+			fmt.Printf("Read header fail: %s\n", err)
+			break
+		}
+		if req.H.Err != "" {
+			fmt.Println(req.H.Err)
+		}
+		err = cd.ReadBody(req.Reply.Interface())
+		if err != nil {
+			fmt.Printf("Read body fail: %s\n", err)
+		}
+		fmt.Println("Server reply:", req.Reply.Elem().Interface())
 	}
-	fmt.Println(req.Reply.Elem().Interface())
-	defer conn.Close()
 }

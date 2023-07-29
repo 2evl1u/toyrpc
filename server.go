@@ -73,25 +73,24 @@ func (s *Server) Start() {
 		var settings = new(Settings)
 		if err = json.NewDecoder(netConn).Decode(settings); err != nil {
 			_ = netConn.Close()
-			log.Printf("decode connect settings fail: %s\n", err)
+			log.Printf("Decode connect settings fail: %s\n", err)
 			continue
 		}
 		// 判断是不是toyrpc的连接，不是的话直接关闭，打印错误日志
 		if settings.MagicNumber != MagicNumber {
 			_ = netConn.Close()
-			log.Println("unknown message type")
+			log.Println("Unknown message type")
 			continue
 		}
 		// 获取编码类型
 		maker, err := codec.Get(settings.CodecType)
 		if err != nil {
 			_ = netConn.Close()
-			log.Println("unknown encoding type")
+			log.Printf("Unknown encoding type: %s\n", settings.CodecType)
 			continue
 		}
 		// 新建toyrpc连接
-		conn := codec.NewConn(maker(netConn))
-		// 是toyrpc连接则处理
+		conn := NewConn(maker(netConn))
 		go conn.Handle()
 	}
 }

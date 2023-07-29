@@ -11,7 +11,7 @@ type Header struct {
 	Service string
 	Method  string
 	SeqId   uint64
-	Err     error
+	Err     string
 }
 
 type Codec interface {
