@@ -14,7 +14,7 @@ const DefaultCodec = "json"
 
 var DefaultSettings = Settings{
 	MagicNumber: MagicNumber,
-	CodecType:   codec.GobType,
+	CodecType:   codec.JSONType,
 }
 
 type Settings struct {

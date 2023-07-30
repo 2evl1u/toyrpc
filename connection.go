@@ -27,6 +27,10 @@ type Request struct {
 	Reply reflect.Value
 }
 
+type Args struct {
+	A, B int
+}
+
 func NewConn(cd codec.Codec) *Connection {
 	conn := &Connection{
 		Codec:   cd,
@@ -53,7 +57,7 @@ func (conn *Connection) Handle() {
 			break // 解析失败将关闭当前连接
 		}
 		// 2 解析请求参数（body）
-		req.Args = reflect.New(reflect.TypeOf(""))
+		req.Args = reflect.New(reflect.TypeOf(Args{}))
 		if err := conn.ReadBody(req.Args.Interface()); err != nil {
 			log.Printf("Connection.Codec read body fail: %s\n", err)
 			req.H.Err = err.Error()
@@ -64,8 +68,7 @@ func (conn *Connection) Handle() {
 		conn.wg.Add(1)
 		go func() {
 			defer conn.wg.Done()
-			err := conn.doCall(req)
-			if err != nil {
+			if err := conn.doCall(req); err != nil {
 				log.Println(err)
 				req.H.Err = err.Error()
 				conn.sendResponse(req)
@@ -93,8 +96,8 @@ func (conn *Connection) sendResponse(req *Request) {
 func (conn *Connection) doCall(req *Request) error {
 	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
 	fmt.Println(req.H.Service, req.H.Method)
-	fmt.Println(req.Args.Elem().String())
-	req.Reply = reflect.ValueOf("this is resp from server:" + req.Args.Elem().String())
+	fmt.Printf("%#v\n", req.Args.Elem())
+	req.Reply = reflect.ValueOf("this is resp from server:" + fmt.Sprintf("%s", req.Args.Interface()))
 	conn.sendResponse(req)
 	return nil
 }

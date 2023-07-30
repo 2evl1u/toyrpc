@@ -32,10 +32,11 @@ func NewClient(address string, opts ...CliOption) *Client {
 	cli := &Client{
 		network:  DefaultNetwork,
 		address:  address,
-		seq:      1,
 		settings: &DefaultSettings,
-		pending:  make(map[uint64]*Call),
 		sending:  new(sync.Mutex),
+		mu:       new(sync.Mutex),
+		seq:      1,
+		pending:  make(map[uint64]*Call),
 	}
 	for _, opt := range opts {
 		opt(cli)
@@ -53,7 +54,7 @@ func NewClient(address string, opts ...CliOption) *Client {
 		panic(err)
 	}
 	log.Printf("Client start, target server address: %s\n", cli.address)
-	cli.receive()
+	go cli.receive()
 	return cli
 }
 
@@ -65,7 +66,7 @@ func (cli *Client) Call(serviceName, methodName string, args, reply any) error {
 			SeqId:   cli.getSeqId(),
 		},
 		Args:  reflect.ValueOf(args),
-		Reply: reflect.New(reflect.TypeOf(reply).Elem()),
+		Reply: reflect.ValueOf(reply),
 	}
 	if err := cli.send(req); err != nil {
 		return errors.WithMessage(err, "send request fail")
@@ -79,6 +80,7 @@ func (cli *Client) Call(serviceName, methodName string, args, reply any) error {
 		return errors.WithMessage(err, "registry fail")
 	}
 	<-call.Done
+	delete(cli.pending, call.Request.H.SeqId)
 	return nil
 }
 
