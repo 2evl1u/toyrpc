@@ -84,7 +84,7 @@ func (cli *Client) Call(serviceName, methodName string, args, reply any) error {
 	}
 	<-call.Done
 	delete(cli.pending, call.Request.H.SeqId)
-	return nil
+	return call.Err
 }
 
 func (cli *Client) send(req *Request) error {

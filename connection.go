@@ -36,12 +36,13 @@ func (conn *Connection) Handle() {
 		req := &Request{H: new(codec.Header)}
 		// 1 解析请求头
 		if err := conn.ReadHeader(req.H); err != nil {
-			log.Printf("Connection.Codec read header fail: %s\n", err)
 			if err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) &&
 				!strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host") {
+				log.Printf("Connection.Codec read header fail: %s\n", err)
 				req.H.Err = err.Error()
 				conn.sendResponse(req)
 			}
+			log.Printf("Connection is closed: %s\n", err)
 			break // 解析失败将关闭当前连接
 		}
 		// 2 解析请求参数（body）
