@@ -59,6 +59,9 @@ func NewClient(address string, opts ...CliOption) *Client {
 }
 
 func (cli *Client) Call(serviceName, methodName string, args, reply any) error {
+	if reflect.TypeOf(reply).Kind() != reflect.Ptr {
+		return errors.New("the reply should be pointer")
+	}
 	req := &Request{
 		H: &codec.Header{
 			Service: serviceName,
