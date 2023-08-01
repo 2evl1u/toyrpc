@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"reflect"
+	"strings"
 	"sync"
 
 	"toyrpc/codec"
@@ -26,10 +27,6 @@ type Request struct {
 	Reply reflect.Value
 }
 
-type Args struct {
-	A, B int
-}
-
 // Handle 接手一个套接字连接
 func (conn *Connection) Handle() {
 	defer func() {
@@ -40,13 +37,15 @@ func (conn *Connection) Handle() {
 		// 1 解析请求头
 		if err := conn.ReadHeader(req.H); err != nil {
 			log.Printf("Connection.Codec read header fail: %s\n", err)
-			if err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) {
+			if err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) &&
+				!strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host") {
 				req.H.Err = err.Error()
 				conn.sendResponse(req)
 			}
 			break // 解析失败将关闭当前连接
 		}
 		// 2 解析请求参数（body）
+		// 加载对应服务与方法
 		s, ok := conn.svr.serviceMap.Load(req.H.Service)
 		if !ok {
 			log.Printf("Service %s doesn't exist\n", req.H.Service)
