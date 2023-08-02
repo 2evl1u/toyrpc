@@ -76,7 +76,7 @@ func (conn *Connection) Handle() {
 		go func() {
 			defer conn.wg.Done()
 			if err := conn.doCall(req); err != nil {
-				log.Println(err)
+				log.Println("doCall fail:", err)
 				req.H.Err = err.Error()
 				conn.sendResponse(req)
 			}
