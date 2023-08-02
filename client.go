@@ -1,6 +1,7 @@
 package toyrpc
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net"
@@ -58,7 +59,7 @@ func NewClient(address string, opts ...CliOption) *Client {
 	return cli
 }
 
-func (cli *Client) Call(serviceName, methodName string, args, reply any) error {
+func (cli *Client) Call(ctx context.Context, serviceName, methodName string, args, reply any) error {
 	if reflect.TypeOf(reply).Kind() != reflect.Ptr {
 		return errors.New("the reply should be pointer")
 	}
@@ -82,9 +83,17 @@ func (cli *Client) Call(serviceName, methodName string, args, reply any) error {
 	if err := cli.registry(call); err != nil {
 		return errors.WithMessage(err, "registry fail")
 	}
-	<-call.Done
-	delete(cli.pending, call.Request.H.SeqId)
-	return call.Err
+
+	select {
+	case <-ctx.Done():
+		call.Invalid = true
+		return errors.New("[toyrpc] Call fail: " + ctx.Err().Error())
+	case <-call.Done:
+		cli.mu.Lock()
+		delete(cli.pending, call.Request.H.SeqId)
+		cli.mu.Unlock()
+		return call.Err
+	}
 }
 
 func (cli *Client) send(req *Request) error {
@@ -133,9 +142,8 @@ func (cli *Client) receive() {
 		}
 		call := cli.pending[h.SeqId]
 		switch {
-		// 处于某些原因取消了，但是服务端仍旧处理了
 		case call == nil:
-			// TODO 暂时不知道怎么处理
+			// 不可能情况
 			break
 		// 调用出错 返回body应为空
 		case h.Err != "":
@@ -147,6 +155,12 @@ func (cli *Client) receive() {
 				call.Err = err
 			}
 			call.done()
+			// 读取完毕发现是超时的无效请求，删除
+			if call.Invalid {
+				cli.mu.Lock()
+				delete(cli.pending, call.Request.H.SeqId)
+				cli.mu.Unlock()
+			}
 		}
 	}
 	cli.terminate(err)

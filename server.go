@@ -8,6 +8,7 @@ import (
 	"net"
 	"reflect"
 	"sync"
+	"time"
 
 	"toyrpc/codec"
 
@@ -18,6 +19,13 @@ type Server struct {
 	network    string
 	address    string
 	serviceMap sync.Map
+}
+
+type service struct {
+	name    string
+	self    reflect.Value
+	mm      map[string]*reflect.Method
+	timeout time.Duration
 }
 
 type SvrOption func(server *Server)
@@ -96,11 +104,12 @@ func (s *Server) Start() {
 // 2. 方法本身是导出的
 // 3. 两个入参，均为导出或内置类型，且第二个入参需为指针类型
 // 4. 返回值是error接口类型
-func (s *Server) AsService(target any) error {
+func (s *Server) AsService(target any, timeout time.Duration) error {
 	// 1 创建服务
 	svc := &service{
-		name: reflect.Indirect(reflect.ValueOf(target)).Type().Name(),
-		self: reflect.ValueOf(target),
+		name:    reflect.Indirect(reflect.ValueOf(target)).Type().Name(),
+		self:    reflect.ValueOf(target),
+		timeout: timeout,
 	}
 	if !ast.IsExported(svc.name) {
 		return errors.New(fmt.Sprintf("%s is not exported", svc.name))

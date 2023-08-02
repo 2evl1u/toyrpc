@@ -1,6 +1,6 @@
 package test
 
-import "github.com/pkg/errors"
+import "time"
 
 type Args struct {
 	A, B int
@@ -27,6 +27,7 @@ type UserRet struct {
 }
 
 func (a *Adder) DoComplex(userInfo UserInfo, ret *UserRet) error {
+	time.Sleep(3 * time.Second)
 	*ret = UserRet{
 		UUID:    "JKFLSDHFJQEUI",
 		Address: "CHINA",
@@ -35,5 +36,9 @@ func (a *Adder) DoComplex(userInfo UserInfo, ret *UserRet) error {
 			{6, 8},
 		},
 	}
-	return errors.New("a call error")
+	return nil
+}
+
+type DoComplexThing interface {
+	DoComplex(userInfo UserInfo, ret *UserRet) error
 }

@@ -1,15 +1,17 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"toyrpc"
 )
 
 func TestServer(t *testing.T) {
 	svr := toyrpc.NewServer(toyrpc.WithSvrAddress(":7788"))
-	err := svr.AsService(&Adder{})
+	err := svr.AsService(&Adder{}, 2*time.Second)
 	if err != nil {
 		fmt.Println("AsService fail:", err)
 	}
@@ -25,7 +27,9 @@ func TestClient(t *testing.T) {
 		Param:    Args{A: 11, B: 5},
 	}
 	var ret = new(UserRet)
-	if err := cli.Call("Adder", "DoComplex", args, ret); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := cli.Call(ctx, "Adder", "DoComplex", args, ret); err != nil {
 		fmt.Println("cli.Call fail:", err)
 	}
 	fmt.Println("ret:", ret)
