@@ -1,7 +1,9 @@
-package toyrpc
+package client
+
+import "toyrpc"
 
 type Call struct {
-	*Request
+	*toyrpc.Request
 	Done    chan struct{}
 	Err     error
 	Invalid bool

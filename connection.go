@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	"toyrpc/codec"
 
@@ -105,23 +104,12 @@ func (conn *Connection) doCall(req *Request) error {
 	s, _ := conn.svr.serviceMap.Load(req.H.Service)
 	svc := s.(*service)
 	method := svc.mm[req.H.Method]
-
-	resChan := make(chan error, 1)
-
-	go func() {
-		ret := method.Func.Call([]reflect.Value{svc.self, req.Args, req.Reply})
-		if err := ret[0].Interface(); err != nil {
-			resChan <- err.(error)
-		}
-		conn.sendResponse(req)
-	}()
-
-	select {
-	case <-time.After(svc.timeout):
-		return errors.New("Do method timeout: " + req.H.Service + req.H.Method)
-	case err := <-resChan:
-		return err
+	ret := method.Func.Call([]reflect.Value{svc.self, req.Args, req.Reply})
+	if err := ret[0].Interface(); err != nil {
+		return err.(error)
 	}
+	conn.sendResponse(req)
+	return nil
 }
 
 func newArgv(t reflect.Type) reflect.Value {

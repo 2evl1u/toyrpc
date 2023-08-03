@@ -7,11 +7,16 @@ import (
 	"time"
 
 	"toyrpc"
+	"toyrpc/client"
 )
 
+func TestRegistry(t *testing.T) {
+
+}
+
 func TestServer(t *testing.T) {
-	svr := toyrpc.NewServer(toyrpc.WithSvrAddress(":7788"))
-	err := svr.AsService(&Adder{}, 2*time.Second)
+	svr := toyrpc.NewServer(toyrpc.WithSvrAddress(":7799"))
+	err := svr.AsService(&Adder{})
 	if err != nil {
 		fmt.Println("AsService fail:", err)
 	}
@@ -19,7 +24,8 @@ func TestServer(t *testing.T) {
 }
 
 func TestClient(t *testing.T) {
-	cli := toyrpc.NewClient(":7788")
+	// :7788 是注册中心地址
+	cli := client.NewClient(":7788")
 	args := UserInfo{
 		UserId:   10045,
 		UserName: "Zev",

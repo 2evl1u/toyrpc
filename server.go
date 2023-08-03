@@ -8,7 +8,6 @@ import (
 	"net"
 	"reflect"
 	"sync"
-	"time"
 
 	"toyrpc/codec"
 
@@ -22,10 +21,9 @@ type Server struct {
 }
 
 type service struct {
-	name    string
-	self    reflect.Value
-	mm      map[string]*reflect.Method
-	timeout time.Duration
+	name string
+	self reflect.Value
+	mm   map[string]*reflect.Method
 }
 
 type SvrOption func(server *Server)
@@ -61,6 +59,7 @@ func (s *Server) Start() {
 		log.Panic(err)
 	}
 	log.Printf("[toyrpc] Server successfully start at %s\n", listener.Addr().String())
+	s.heartbeat()
 	// 循环接受客户端连接
 	for {
 		netConn, err := listener.Accept()
@@ -104,12 +103,11 @@ func (s *Server) Start() {
 // 2. 方法本身是导出的
 // 3. 两个入参，均为导出或内置类型，且第二个入参需为指针类型
 // 4. 返回值是error接口类型
-func (s *Server) AsService(target any, timeout time.Duration) error {
+func (s *Server) AsService(target any) error {
 	// 1 创建服务
 	svc := &service{
-		name:    reflect.Indirect(reflect.ValueOf(target)).Type().Name(),
-		self:    reflect.ValueOf(target),
-		timeout: timeout,
+		name: reflect.Indirect(reflect.ValueOf(target)).Type().Name(),
+		self: reflect.ValueOf(target),
 	}
 	if !ast.IsExported(svc.name) {
 		return errors.New(fmt.Sprintf("%s is not exported", svc.name))
@@ -156,4 +154,9 @@ func (s *Server) newConn(cd codec.Codec) *Connection {
 		svr:     s,
 	}
 	return conn
+}
+
+// 发送心跳，指示注册中心该服务存活
+func (s *Server) heartbeat() {
+
 }
