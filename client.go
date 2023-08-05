@@ -1,4 +1,4 @@
-package client
+package toyrpc
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"sync"
 
-	"toyrpc"
 	"toyrpc/codec"
 
 	"github.com/pkg/errors"
@@ -21,7 +20,7 @@ type Client struct {
 	netConn  net.Conn
 	network  string
 	address  string
-	settings *toyrpc.Settings
+	settings *Settings
 	sending  *sync.Mutex // 保证一个返回能完整发送
 	mu       *sync.Mutex // 保护seq和pending
 	seq      uint64
@@ -32,9 +31,9 @@ type Client struct {
 
 func NewClient(address string, opts ...CliOption) *Client {
 	cli := &Client{
-		network:  toyrpc.DefaultNetwork,
+		network:  DefaultNetwork,
 		address:  address,
-		settings: &toyrpc.DefaultSettings,
+		settings: &DefaultSettings,
 		sending:  new(sync.Mutex),
 		mu:       new(sync.Mutex),
 		seq:      1,
@@ -64,7 +63,7 @@ func (cli *Client) Call(ctx context.Context, serviceName, methodName string, arg
 	if reflect.TypeOf(reply).Kind() != reflect.Ptr {
 		return errors.New("the reply should be pointer")
 	}
-	req := &toyrpc.Request{
+	req := &Request{
 		H: &codec.Header{
 			Service: serviceName,
 			Method:  methodName,
@@ -97,7 +96,7 @@ func (cli *Client) Call(ctx context.Context, serviceName, methodName string, arg
 	}
 }
 
-func (cli *Client) send(req *toyrpc.Request) error {
+func (cli *Client) send(req *Request) error {
 	cli.sending.Lock()
 	defer cli.sending.Unlock()
 	if err := cli.Write(req.H, req.Args.Interface()); err != nil {

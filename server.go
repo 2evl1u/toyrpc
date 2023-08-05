@@ -1,13 +1,16 @@
 package toyrpc
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"go/ast"
 	"log"
 	"net"
+	"net/http"
 	"reflect"
 	"sync"
+	"time"
 
 	"toyrpc/codec"
 
@@ -15,15 +18,18 @@ import (
 )
 
 type Server struct {
-	network    string
-	address    string
-	serviceMap sync.Map
+	network           string
+	address           string
+	registry          string
+	serviceMap        sync.Map
+	heartbeatInterval time.Duration
 }
 
 type service struct {
 	name string
 	self reflect.Value
 	mm   map[string]*reflect.Method
+	svr  *Server
 }
 
 type SvrOption func(server *Server)
@@ -41,10 +47,12 @@ func WithSvrAddress(address string) SvrOption {
 }
 
 // NewServer 如果不指定网络类型，默认tcp；如果不指定端口，则默认7788端口
-func NewServer(opts ...SvrOption) *Server {
+func NewServer(registry string, opts ...SvrOption) *Server {
 	svr := &Server{
-		network: DefaultNetwork,
-		address: DefaultAddr,
+		network:           DefaultNetwork,
+		address:           DefaultAddr,
+		registry:          registry,
+		heartbeatInterval: DefaultServerHeartbeatInterval,
 	}
 	for _, opt := range opts {
 		opt(svr)
@@ -59,7 +67,6 @@ func (s *Server) Start() {
 		log.Panic(err)
 	}
 	log.Printf("[toyrpc] Server successfully start at %s\n", listener.Addr().String())
-	s.heartbeat()
 	// 循环接受客户端连接
 	for {
 		netConn, err := listener.Accept()
@@ -67,7 +74,7 @@ func (s *Server) Start() {
 		// 某个连接失败，就close掉，然后跳过接着等待连接
 		if err != nil {
 			_ = netConn.Close()
-			log.Printf("listener accept fail: %s, remote addr: %s\n", err, netConn.RemoteAddr().String())
+			log.Printf("listener accept fail: %s, remote port: %s\n", err, netConn.RemoteAddr().String())
 			continue
 		}
 		// 连接正常建立之后，先解码settings，获取标识和消息编码类型
@@ -108,6 +115,7 @@ func (s *Server) AsService(target any) error {
 	svc := &service{
 		name: reflect.Indirect(reflect.ValueOf(target)).Type().Name(),
 		self: reflect.ValueOf(target),
+		svr:  s,
 	}
 	if !ast.IsExported(svc.name) {
 		return errors.New(fmt.Sprintf("%s is not exported", svc.name))
@@ -143,6 +151,18 @@ func (s *Server) AsService(target any) error {
 		nameSli = append(nameSli, name)
 	}
 	log.Printf("[toyrpc] Register service: %s. Methods as followed: %s\n", svc.name, nameSli)
+	svc.heartbeat()
+	go func() {
+		// 心跳的间隔比服务器超时间隔稍短
+		ticker := time.NewTicker(s.heartbeatInterval)
+		for {
+			select {
+			case <-ticker.C:
+				svc.heartbeat()
+				log.Println("send heartbeat to registry")
+			}
+		}
+	}()
 	return nil
 }
 
@@ -157,6 +177,18 @@ func (s *Server) newConn(cd codec.Codec) *Connection {
 }
 
 // 发送心跳，指示注册中心该服务存活
-func (s *Server) heartbeat() {
-
+func (s *service) heartbeat() {
+	body := SvcUpdateMapping{
+		ServiceName: s.name,
+		ServiceAddr: s.svr.address,
+	}
+	bs, _ := json.Marshal(body)
+	buffer := bytes.NewBuffer(bs)
+	resp, err := http.Post(s.svr.registry+DefaultRegisterPath, "application/json", buffer)
+	if err != nil {
+		log.Println("heartbeat post fail", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		log.Println(s.svr.address, "send heartbeat fail")
+	}
 }

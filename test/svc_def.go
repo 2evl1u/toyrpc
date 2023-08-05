@@ -38,7 +38,3 @@ func (a *Adder) DoComplex(userInfo UserInfo, ret *UserRet) error {
 	}
 	return nil
 }
-
-type DoComplexThing interface {
-	DoComplex(userInfo UserInfo, ret *UserRet) error
-}
