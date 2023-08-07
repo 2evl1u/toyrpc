@@ -1,4 +1,4 @@
-module toyrpc
+module github.com/2evl1u/toyrpc
 
 go 1.20
 
