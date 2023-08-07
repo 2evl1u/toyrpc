@@ -100,13 +100,13 @@ func (s *Server) Start() {
 			continue
 		}
 		// 新建toyrpc连接
-		conn := &Connection{
+		conn := &connection{
 			Codec:   maker(netConn),
 			sending: new(sync.Mutex),
 			wg:      new(sync.WaitGroup),
 			svr:     s,
 		}
-		go conn.Handle()
+		go conn.handle()
 	}
 }
 

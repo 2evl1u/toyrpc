@@ -17,17 +17,17 @@ import (
 var ErrClosed = errors.New("client is closed")
 
 type Call struct {
-	*Request
-	Done    chan struct{}
-	Err     error
-	Invalid bool // 是否超时（无效）
+	*request
+	done    chan struct{}
+	err     error
+	invalid bool // 是否超时（无效）
 }
 
-func (c *Call) done() {
-	c.Done <- struct{}{}
+func (c *Call) finished() {
+	c.done <- struct{}{}
 }
 
-type Client struct {
+type client struct {
 	codec.Codec
 	netConn    net.Conn
 	network    string
@@ -41,8 +41,8 @@ type Client struct {
 	shutdown   bool             // 客户端发生严重错误，被强行关闭
 }
 
-func NewClient(address string, opts ...CliOption) *Client {
-	cli := &Client{
+func newClient(address string, opts ...CliOption) *client {
+	cli := &client{
 		network:    DefaultNetwork,
 		targetAddr: address,
 		settings:   &DefaultSettings,
@@ -70,26 +70,26 @@ func NewClient(address string, opts ...CliOption) *Client {
 	return cli
 }
 
-func (cli *Client) Call(ctx context.Context, serviceName, methodName string, args, reply any) error {
+func (cli *client) call(ctx context.Context, serviceName, methodName string, args, reply any) error {
 	if reflect.TypeOf(reply).Kind() != reflect.Ptr {
 		return errors.New("the reply should be pointer")
 	}
-	req := &Request{
-		H: &codec.Header{
+	req := &request{
+		h: &codec.Header{
 			Service: serviceName,
 			Method:  methodName,
 			SeqId:   cli.getSeqId(),
 		},
-		Args:  reflect.ValueOf(args),
-		Reply: reflect.ValueOf(reply),
+		args:  reflect.ValueOf(args),
+		reply: reflect.ValueOf(reply),
 	}
 	if err := cli.send(req); err != nil {
 		return errors.WithMessage(err, "send request fail")
 	}
 	call := &Call{
-		Request: req,
-		Done:    make(chan struct{}, 1),
-		Err:     nil,
+		request: req,
+		done:    make(chan struct{}, 1),
+		err:     nil,
 	}
 	if err := cli.registry(call); err != nil {
 		return errors.WithMessage(err, "registry fail")
@@ -97,28 +97,28 @@ func (cli *Client) Call(ctx context.Context, serviceName, methodName string, arg
 	select {
 	// 超时
 	case <-ctx.Done():
-		call.Invalid = true
+		call.invalid = true
 		return errors.New("call fail: " + ctx.Err().Error())
-	case <-call.Done:
+	case <-call.done:
 		cli.mu.Lock()
-		delete(cli.pending, call.Request.H.SeqId)
+		delete(cli.pending, call.request.h.SeqId)
 		cli.mu.Unlock()
-		return call.Err
+		return call.err
 	}
 }
 
 // 发送请求
-func (cli *Client) send(req *Request) error {
+func (cli *client) send(req *request) error {
 	cli.sending.Lock()
 	defer cli.sending.Unlock()
-	if err := cli.Write(req.H, req.Args.Interface()); err != nil {
+	if err := cli.Write(req.h, req.args.Interface()); err != nil {
 		return errors.WithMessage(err, "client write fail")
 	}
 	return nil
 }
 
 // 获取唯一标识（需要加锁保证线程安全）
-func (cli *Client) getSeqId() uint64 {
+func (cli *client) getSeqId() uint64 {
 	cli.mu.Lock()
 	defer cli.mu.Unlock()
 	ret := cli.seq
@@ -127,17 +127,17 @@ func (cli *Client) getSeqId() uint64 {
 }
 
 // 将调用注册到pending中
-func (cli *Client) registry(call *Call) error {
+func (cli *client) registry(call *Call) error {
 	cli.mu.Lock()
 	defer cli.mu.Unlock()
 	if cli.closed || cli.shutdown {
 		return ErrClosed
 	}
-	cli.pending[call.H.SeqId] = call
+	cli.pending[call.h.SeqId] = call
 	return nil
 }
 
-func (cli *Client) Close() error {
+func (cli *client) Close() error {
 	cli.mu.Lock()
 	defer cli.mu.Unlock()
 	if cli.closed {
@@ -147,7 +147,7 @@ func (cli *Client) Close() error {
 	return cli.Codec.Close()
 }
 
-func (cli *Client) receive() {
+func (cli *client) receive() {
 	var err error
 	var h codec.Header
 	for {
@@ -162,18 +162,18 @@ func (cli *Client) receive() {
 			break
 		// 调用出错 返回body应为空
 		case h.Err != "":
-			call.Err = errors.New(h.Err)
-			call.done()
+			call.err = errors.New(h.Err)
+			call.finished()
 		default:
-			err = cli.ReadBody(call.Reply.Interface())
+			err = cli.ReadBody(call.reply.Interface())
 			if err != nil {
-				call.Err = err
+				call.err = err
 			}
-			call.done()
+			call.finished()
 			// 读取完毕发现是超时的无效请求，删除
-			if call.Invalid { // 这里先读取再丢弃是为了保证后面的调用返回能正确读取
+			if call.invalid { // 这里先读取再丢弃是为了保证后面的调用返回能正确读取
 				cli.mu.Lock()
-				delete(cli.pending, call.Request.H.SeqId)
+				delete(cli.pending, call.request.h.SeqId)
 				cli.mu.Unlock()
 			}
 		}
@@ -182,7 +182,7 @@ func (cli *Client) receive() {
 }
 
 // 由于某些内部原因导致了严重错误，需要强行关闭客户端
-func (cli *Client) terminate(err error) {
+func (cli *client) terminate(err error) {
 	cli.sending.Lock()
 	defer cli.sending.Unlock()
 	cli.mu.Lock()
@@ -190,21 +190,21 @@ func (cli *Client) terminate(err error) {
 	cli.shutdown = true
 	// 将正在pending的调用填写错误原因，全部停止
 	for _, call := range cli.pending {
-		call.Err = err
-		call.done()
+		call.err = err
+		call.finished()
 	}
 }
 
-type CliOption func(cli *Client)
+type CliOption func(cli *client)
 
 func WithCliNetwork(network string) CliOption {
-	return func(cli *Client) {
+	return func(cli *client) {
 		cli.network = network
 	}
 }
 
 func WithCliCodecType(codecType string) CliOption {
-	return func(cli *Client) {
+	return func(cli *client) {
 		cli.settings.CodecType = codecType
 	}
 }

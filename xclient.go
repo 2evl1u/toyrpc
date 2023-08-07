@@ -1,4 +1,4 @@
-package xclient
+package toyrpc
 
 import (
 	"context"
@@ -10,8 +10,6 @@ import (
 	"time"
 
 	. "toyrpc/log"
-
-	"toyrpc"
 
 	"github.com/pkg/errors"
 )
@@ -43,12 +41,12 @@ type serviceClients struct {
 
 type cliDetail struct {
 	addr        string
-	cli         *toyrpc.Client
+	cli         *client
 	lastUpdated time.Time
 }
 
 // 根据服务名，选择模式来选取一个可用的客户端实例
-func (d *discovery) get(serviceName string, mode SelectMode) (*toyrpc.Client, error) {
+func (d *discovery) get(serviceName string, mode SelectMode) (*client, error) {
 	svcClients, ok := d.svcMap[serviceName]
 	// 第一次调用，discovery还未存在对应服务
 	if !ok {
@@ -87,7 +85,7 @@ func (d *discovery) get(serviceName string, mode SelectMode) (*toyrpc.Client, er
 
 // 从注册中心拉取服务实例地址
 func (d *discovery) fetch(serviceName string) ([]string, error) {
-	resp, err := http.Get(d.registry + toyrpc.DefaultRegisterPath + "?serviceName=" + serviceName)
+	resp, err := http.Get(d.registry + DefaultRegisterPath + "?serviceName=" + serviceName)
 	if err != nil {
 		ErrorLogger.Println("dicovery fetch service addr fail:", err)
 	}
@@ -120,7 +118,7 @@ func (d *discovery) update(serviceName string) error {
 		for _, addr := range svcAddrs {
 			d.svcMap[serviceName].list = append(d.svcMap[serviceName].list, cliDetail{
 				addr:        addr,
-				cli:         toyrpc.NewClient(addr),
+				cli:         newClient(addr),
 				lastUpdated: time.Now(),
 			})
 		}
@@ -137,7 +135,7 @@ func (d *discovery) update(serviceName string) error {
 			if !existed {
 				d.svcMap[serviceName].list = append(d.svcMap[serviceName].list, cliDetail{
 					addr:        addr,
-					cli:         toyrpc.NewClient(addr),
+					cli:         newClient(addr),
 					lastUpdated: time.Now(),
 				})
 			}
@@ -176,7 +174,7 @@ func NewClient(registry string, opts ...CliOpt) *Client {
 		d: &discovery{
 			svcMap:         make(map[string]*serviceClients),
 			mu:             new(sync.RWMutex),
-			updateInterval: toyrpc.DefaultServerHeartbeatInterval, // 心跳的间隔比服务器超时间隔稍短
+			updateInterval: DefaultServerHeartbeatInterval, // 心跳的间隔比服务器超时间隔稍短
 			registry:       registry,
 			r:              rand.New(rand.NewSource(time.Now().UnixNano())),
 		},
@@ -203,7 +201,7 @@ func (cli *Client) Call(ctx context.Context, serviceName, methodName string, arg
 	if err != nil {
 		return err
 	}
-	return c.Call(ctx, serviceName, methodName, args, reply)
+	return c.call(ctx, serviceName, methodName, args, reply)
 }
 
 func (cli *Client) Close() error {

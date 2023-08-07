@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"toyrpc"
-	"toyrpc/xclient"
 )
 
 func TestRegistry(t *testing.T) {
@@ -25,7 +24,7 @@ func TestServer(t *testing.T) {
 }
 
 func TestClient(t *testing.T) {
-	cli := xclient.NewClient("http://localhost:9999")
+	cli := toyrpc.NewClient("http://localhost:9999")
 
 	args := UserInfo{
 		UserId:   10045,
