@@ -78,4 +78,21 @@ func TestClient(t *testing.T) {
 		}
 		cancel()
 	})
+
+	t.Run("call fail2", func(t *testing.T) {
+		args := UserReq{
+			UserId:   10045,
+			UserName: "Zev",
+			Married:  true,
+			Param:    Args{A: 11, B: 5},
+		}
+		var ret = new(int)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := cli.Call(ctx, "Adder", "DoComplex", args, ret); err != nil {
+			fmt.Println("Call fail:", err)
+		} else {
+			fmt.Println("ret:", ret)
+		}
+		cancel()
+	})
 }
