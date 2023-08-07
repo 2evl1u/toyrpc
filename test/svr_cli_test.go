@@ -86,7 +86,7 @@ func TestClient(t *testing.T) {
 			Married:  true,
 			Param:    Args{A: 11, B: 5},
 		}
-		var ret = new(int)
+		var ret = new(int) // 错误的接收者
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := cli.Call(ctx, "Adder", "DoComplex", args, ret); err != nil {
 			fmt.Println("Call fail:", err)
