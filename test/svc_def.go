@@ -1,6 +1,10 @@
 package test
 
-import "time"
+import (
+	"fmt"
+
+	"github.com/pkg/errors"
+)
 
 type Args struct {
 	A, B int
@@ -13,23 +17,23 @@ func (a *Adder) Add(args Args, sum *int) error {
 	return nil
 }
 
-type UserInfo struct {
+type UserReq struct {
 	UserId   int
 	UserName string
 	Married  bool
 	Param    Args
 }
 
-type UserRet struct {
+type UserResp struct {
 	UUID    string
 	Address string
 	Status  []Args
 }
 
-func (a *Adder) DoComplex(userInfo UserInfo, ret *UserRet) error {
-	time.Sleep(3 * time.Second)
-	*ret = UserRet{
-		UUID:    "JKFLSDHFJQEUI",
+func (a *Adder) DoComplex(userInfo UserReq, ret *UserResp) error {
+	fmt.Println(userInfo)
+	*ret = UserResp{
+		UUID:    "ABCD-ABCD-ABCD-ABCD-ABCD",
 		Address: "CHINA",
 		Status: []Args{
 			{3, 4},
@@ -37,4 +41,10 @@ func (a *Adder) DoComplex(userInfo UserInfo, ret *UserRet) error {
 		},
 	}
 	return nil
+}
+
+type ErrService struct{}
+
+func (e *ErrService) GetErr(userInfo UserReq, ret *UserResp) error {
+	return errors.New("a unexpected error")
 }

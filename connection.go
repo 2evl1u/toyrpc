@@ -103,6 +103,7 @@ func (conn *connection) sendResponse(req *request) {
 
 // 加载对应的服务并调用
 func (conn *connection) doCall(req *request) error {
+	CommonLogger.Printf("Do method %s\n", req.h.Method)
 	s, _ := conn.svr.serviceMap.Load(req.h.Service)
 	svc := s.(*service)
 	method := svc.mm[req.h.Method]
