@@ -11,7 +11,7 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	r := toyrpc.NewRegistry()
+	r := toyrpc.NewRegistry(toyrpc.WithPort(":9999"))
 	r.Start()
 }
 

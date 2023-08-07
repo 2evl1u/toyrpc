@@ -3,10 +3,11 @@ package toyrpc
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net"
 	"reflect"
 	"sync"
+
+	. "toyrpc/log"
 
 	"toyrpc/codec"
 
@@ -15,46 +16,56 @@ import (
 
 var ErrClosed = errors.New("client is closed")
 
+type Call struct {
+	*Request
+	Done    chan struct{}
+	Err     error
+	Invalid bool // 是否超时（无效）
+}
+
+func (c *Call) done() {
+	c.Done <- struct{}{}
+}
+
 type Client struct {
 	codec.Codec
-	netConn  net.Conn
-	network  string
-	address  string
-	settings *Settings
-	sending  *sync.Mutex // 保证一个返回能完整发送
-	mu       *sync.Mutex // 保护seq和pending
-	seq      uint64
-	pending  map[uint64]*Call
-	closed   bool // 用户关闭了客户端
-	shutdown bool // 客户端发生严重错误，被强行关闭
+	netConn    net.Conn
+	network    string
+	targetAddr string
+	settings   *Settings
+	sending    *sync.Mutex      // 保证一个返回能完整发送
+	mu         *sync.Mutex      // 保护seq和pending
+	seq        uint64           // 每一个调用的唯一标识
+	pending    map[uint64]*Call // 请求中的调用
+	closed     bool             // 用户关闭了客户端
+	shutdown   bool             // 客户端发生严重错误，被强行关闭
 }
 
 func NewClient(address string, opts ...CliOption) *Client {
 	cli := &Client{
-		network:  DefaultNetwork,
-		address:  address,
-		settings: &DefaultSettings,
-		sending:  new(sync.Mutex),
-		mu:       new(sync.Mutex),
-		seq:      1,
-		pending:  make(map[uint64]*Call),
+		network:    DefaultNetwork,
+		targetAddr: address,
+		settings:   &DefaultSettings,
+		sending:    new(sync.Mutex),
+		mu:         new(sync.Mutex),
+		seq:        1,
+		pending:    make(map[uint64]*Call),
 	}
 	for _, opt := range opts {
 		opt(cli)
 	}
 	maker, _ := codec.Get(cli.settings.CodecType)
-	conn, err := net.Dial(cli.network, cli.address)
+	conn, err := net.Dial(cli.network, cli.targetAddr)
 	if err != nil {
 		panic(err)
 	}
 	cli.netConn = conn
 	cli.Codec = maker(conn)
-
 	if err := json.NewEncoder(cli.netConn).Encode(cli.settings); err != nil {
 		_ = cli.Codec.Close()
 		panic(err)
 	}
-	log.Printf("Client start, target server address: %s\n", cli.address)
+	CommonLogger.Printf("Client start, connect to: %s\n", cli.targetAddr)
 	go cli.receive()
 	return cli
 }
@@ -83,11 +94,11 @@ func (cli *Client) Call(ctx context.Context, serviceName, methodName string, arg
 	if err := cli.registry(call); err != nil {
 		return errors.WithMessage(err, "registry fail")
 	}
-
 	select {
+	// 超时
 	case <-ctx.Done():
 		call.Invalid = true
-		return errors.New("[toyrpc] Call fail: " + ctx.Err().Error())
+		return errors.New("call fail: " + ctx.Err().Error())
 	case <-call.Done:
 		cli.mu.Lock()
 		delete(cli.pending, call.Request.H.SeqId)
@@ -96,6 +107,7 @@ func (cli *Client) Call(ctx context.Context, serviceName, methodName string, arg
 	}
 }
 
+// 发送请求
 func (cli *Client) send(req *Request) error {
 	cli.sending.Lock()
 	defer cli.sending.Unlock()
@@ -105,6 +117,7 @@ func (cli *Client) send(req *Request) error {
 	return nil
 }
 
+// 获取唯一标识（需要加锁保证线程安全）
 func (cli *Client) getSeqId() uint64 {
 	cli.mu.Lock()
 	defer cli.mu.Unlock()
@@ -113,6 +126,7 @@ func (cli *Client) getSeqId() uint64 {
 	return ret
 }
 
+// 将调用注册到pending中
 func (cli *Client) registry(call *Call) error {
 	cli.mu.Lock()
 	defer cli.mu.Unlock()
@@ -138,6 +152,7 @@ func (cli *Client) receive() {
 	var h codec.Header
 	for {
 		if err = cli.ReadHeader(&h); err != nil {
+			// 读取header出错，证明该连接存在问题，应终止该连接
 			break
 		}
 		call := cli.pending[h.SeqId]
@@ -156,7 +171,7 @@ func (cli *Client) receive() {
 			}
 			call.done()
 			// 读取完毕发现是超时的无效请求，删除
-			if call.Invalid {
+			if call.Invalid { // 这里先读取再丢弃是为了保证后面的调用返回能正确读取
 				cli.mu.Lock()
 				delete(cli.pending, call.Request.H.SeqId)
 				cli.mu.Unlock()

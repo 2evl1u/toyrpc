@@ -2,10 +2,11 @@ package toyrpc
 
 import (
 	"io"
-	"log"
 	"reflect"
 	"strings"
 	"sync"
+
+	. "toyrpc/log"
 
 	"toyrpc/codec"
 
@@ -38,24 +39,24 @@ func (conn *Connection) Handle() {
 		if err := conn.ReadHeader(req.H); err != nil {
 			if err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) &&
 				!strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host") {
-				log.Printf("Connection.Codec read header fail: %s\n", err)
+				ErrorLogger.Printf("Connection.Codec read header fail: %s\n", err)
 				req.H.Err = err.Error()
 				conn.sendResponse(req)
 			}
-			log.Printf("Connection is closed: %s\n", err)
+			ErrorLogger.Printf("Connection is closed: %s\n", err)
 			break // 解析失败将关闭当前连接
 		}
 		// 2 解析请求参数（body）
 		// 加载对应服务与方法
 		s, ok := conn.svr.serviceMap.Load(req.H.Service)
 		if !ok {
-			log.Printf("Service %s doesn't exist\n", req.H.Service)
+			ErrorLogger.Printf("Service %s doesn't exist\n", req.H.Service)
 			break
 		}
 		svc := s.(*service)
 		method, ok := svc.mm[req.H.Method]
 		if !ok {
-			log.Printf("Method %s doesn't exist\n", req.H.Method)
+			ErrorLogger.Printf("Method %s doesn't exist\n", req.H.Method)
 			break
 		}
 		argT, replyT := method.Type.In(1), method.Type.In(2)
@@ -66,7 +67,7 @@ func (conn *Connection) Handle() {
 			argPtr = req.Args.Addr().Interface()
 		}
 		if err := conn.ReadBody(argPtr); err != nil {
-			log.Printf("Connection.Codec read body fail: %s\n", err)
+			ErrorLogger.Printf("Connection.Codec read body fail: %s\n", err)
 			req.H.Err = err.Error()
 			conn.sendResponse(req)
 			break // 解析失败将关闭当前连接
@@ -76,7 +77,7 @@ func (conn *Connection) Handle() {
 		go func() {
 			defer conn.wg.Done()
 			if err := conn.doCall(req); err != nil {
-				log.Println("doCall fail:", err)
+				ErrorLogger.Printf("Call %s.%s fail: %s\n", req.H.Service, req.H.Method, err)
 				req.H.Err = err.Error()
 				conn.sendResponse(req)
 			}
@@ -96,10 +97,11 @@ func (conn *Connection) sendResponse(req *Request) {
 		body = req.Reply.Interface()
 	}
 	if err := conn.Write(req.H, body); err != nil {
-		log.Printf("Connection.Codec write fail: %s\n", err)
+		ErrorLogger.Printf("Connection.Codec write fail: %s\n", err)
 	}
 }
 
+// 加载对应的服务并调用
 func (conn *Connection) doCall(req *Request) error {
 	s, _ := conn.svr.serviceMap.Load(req.H.Service)
 	svc := s.(*service)

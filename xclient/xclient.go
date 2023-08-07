@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"sync"
 	"time"
+
+	. "toyrpc/log"
 
 	"toyrpc"
 
@@ -52,17 +53,18 @@ func (d *discovery) get(serviceName string, mode SelectMode) (*toyrpc.Client, er
 	// 第一次调用，discovery还未存在对应服务
 	if !ok {
 		if err := d.update(serviceName); err != nil {
-			log.Println(err)
+			ErrorLogger.Printf("Update discovery fail: %s\n", err)
 		}
 		svcClients = d.svcMap[serviceName]
 	}
+	// 不一开始就上锁的原因是 d.update中会上锁，go的锁不可重入
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	var ci cliDetail
 	for {
 		n := len(svcClients.list)
 		if n == 0 {
-			return nil, errors.New("[toyrpc] rpc discovery: no available servers")
+			return nil, errors.New("no available servers")
 		}
 		switch mode {
 		case RandomSelect:
@@ -72,9 +74,9 @@ func (d *discovery) get(serviceName string, mode SelectMode) (*toyrpc.Client, er
 			ci = svcClients.list[svcClients.idx%n] // servers could be updated, so mode n to ensure safety
 			svcClients.idx = (svcClients.idx + 1) % n
 		default:
-			return nil, errors.New("[toyrpc] rpc discovery: not supported select mode")
+			return nil, errors.New("not supported select mode")
 		}
-		// 该客户端已经过期 将其删除
+		// 如果该客户端已经过期 将其删除
 		if ci.lastUpdated.Add(d.updateInterval).Before(time.Now()) {
 			svcClients.list = append(svcClients.list[:svcClients.idx], svcClients.list[svcClients.idx+1:]...)
 			continue
@@ -87,15 +89,15 @@ func (d *discovery) get(serviceName string, mode SelectMode) (*toyrpc.Client, er
 func (d *discovery) fetch(serviceName string) ([]string, error) {
 	resp, err := http.Get(d.registry + toyrpc.DefaultRegisterPath + "?serviceName=" + serviceName)
 	if err != nil {
-		log.Println("dicovery fetch service addr fail:", err)
+		ErrorLogger.Println("dicovery fetch service addr fail:", err)
 	}
 	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("read body fail:", err)
+		ErrorLogger.Println("read body fail:", err)
 	}
 	var res []string
 	if err = json.Unmarshal(bs, &res); err != nil {
-		log.Println("json unmarshal fail:", err)
+		ErrorLogger.Println("json unmarshal fail:", err)
 	}
 	return res, nil
 }
@@ -108,10 +110,9 @@ func (d *discovery) update(serviceName string) error {
 	if err != nil {
 		return err
 	}
-	log.Println("fetch services:", svcAddrs)
+	CommonLogger.Printf("Successfully fetching services: %s\n", svcAddrs)
 	d.mu.Lock()
 	defer d.mu.Unlock()
-
 	if _, ok := d.svcMap[serviceName]; !ok {
 		// 不存在该服务及对应的客户端
 		d.svcMap[serviceName] = new(serviceClients)
@@ -142,14 +143,14 @@ func (d *discovery) update(serviceName string) error {
 			}
 		}
 	}
-	log.Println("update discovery services")
+	CommonLogger.Println("Update discovery services successfully")
 	return nil
 }
 
 func (d *discovery) autoUpdate() {
-	for svcName, _ := range d.svcMap {
+	for svcName := range d.svcMap {
 		if err := d.update(svcName); err != nil {
-			log.Println("update service fail:", err)
+			ErrorLogger.Printf("Update service fail: %s\n", err)
 		}
 	}
 }
@@ -211,7 +212,7 @@ func (cli *Client) Close() error {
 	for _, sc := range cli.d.svcMap {
 		for _, ci := range sc.list {
 			if err := ci.cli.Close(); err != nil {
-				log.Println(err)
+				ErrorLogger.Println(err)
 			}
 		}
 	}

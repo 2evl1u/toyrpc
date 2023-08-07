@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
-	"log"
 	"net"
 	"net/http"
 	"reflect"
 	"sync"
 	"time"
+
+	. "toyrpc/log"
 
 	"toyrpc/codec"
 
@@ -64,17 +65,17 @@ func (s *Server) Start() {
 	listener, err := net.Listen(s.network, s.address)
 	// 启动监听失败，直接panic
 	if err != nil {
-		log.Panic(err)
+		ErrorLogger.Panic(err)
 	}
-	log.Printf("[toyrpc] Server successfully start at %s\n", listener.Addr().String())
+	CommonLogger.Printf("Server successfully start at %s\n", listener.Addr().String())
 	// 循环接受客户端连接
 	for {
 		netConn, err := listener.Accept()
-		log.Printf("Connect from %s\n", netConn.RemoteAddr().String())
+		CommonLogger.Printf("Connect from %s\n", netConn.RemoteAddr().String())
 		// 某个连接失败，就close掉，然后跳过接着等待连接
 		if err != nil {
 			_ = netConn.Close()
-			log.Printf("listener accept fail: %s, remote port: %s\n", err, netConn.RemoteAddr().String())
+			ErrorLogger.Printf("Listener accept fail: %s, remote port: %s\n", err, netConn.RemoteAddr().String())
 			continue
 		}
 		// 连接正常建立之后，先解码settings，获取标识和消息编码类型
@@ -82,24 +83,29 @@ func (s *Server) Start() {
 		var settings = new(Settings)
 		if err = json.NewDecoder(netConn).Decode(settings); err != nil {
 			_ = netConn.Close()
-			log.Printf("Decode connect settings fail: %s\n", err)
+			ErrorLogger.Printf("Decode connect settings fail: %s\n", err)
 			continue
 		}
 		// 判断是不是toyrpc的连接，不是的话直接关闭，打印错误日志
 		if settings.MagicNumber != MagicNumber {
 			_ = netConn.Close()
-			log.Println("Unknown message type")
+			ErrorLogger.Println("Unknown message type")
 			continue
 		}
 		// 获取编码类型
 		maker, err := codec.Get(settings.CodecType)
 		if err != nil {
 			_ = netConn.Close()
-			log.Printf("Unknown encoding type: %s\n", settings.CodecType)
+			ErrorLogger.Printf("Unknown encoding type: %s\n", settings.CodecType)
 			continue
 		}
 		// 新建toyrpc连接
-		conn := s.newConn(maker(netConn))
+		conn := &Connection{
+			Codec:   maker(netConn),
+			sending: new(sync.Mutex),
+			wg:      new(sync.WaitGroup),
+			svr:     s,
+		}
 		go conn.Handle()
 	}
 }
@@ -150,7 +156,8 @@ func (s *Server) AsService(target any) error {
 	for name := range svc.mm {
 		nameSli = append(nameSli, name)
 	}
-	log.Printf("[toyrpc] Register service: %s. Methods as followed: %s\n", svc.name, nameSli)
+	CommonLogger.Printf("Register service: %s. Methods as followed: %s\n", svc.name, nameSli)
+	// 向注册中心发送心跳
 	svc.heartbeat()
 	go func() {
 		// 心跳的间隔比服务器超时间隔稍短
@@ -159,26 +166,16 @@ func (s *Server) AsService(target any) error {
 			select {
 			case <-ticker.C:
 				svc.heartbeat()
-				log.Println("send heartbeat to registry")
+				CommonLogger.Println("Send heartbeat to registry")
 			}
 		}
 	}()
 	return nil
 }
 
-func (s *Server) newConn(cd codec.Codec) *Connection {
-	conn := &Connection{
-		Codec:   cd,
-		sending: new(sync.Mutex),
-		wg:      new(sync.WaitGroup),
-		svr:     s,
-	}
-	return conn
-}
-
 // 发送心跳，指示注册中心该服务存活
 func (s *service) heartbeat() {
-	body := SvcUpdateMapping{
+	body := svcUpdateMapping{
 		ServiceName: s.name,
 		ServiceAddr: s.svr.address,
 	}
@@ -186,9 +183,9 @@ func (s *service) heartbeat() {
 	buffer := bytes.NewBuffer(bs)
 	resp, err := http.Post(s.svr.registry+DefaultRegisterPath, "application/json", buffer)
 	if err != nil {
-		log.Println("heartbeat post fail", err)
+		ErrorLogger.Printf("Send heartbeat post request fail: %s\n", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		log.Println(s.svr.address, "send heartbeat fail")
+		ErrorLogger.Printf("Heartbeat response err, status code: %s\n", resp.StatusCode)
 	}
 }

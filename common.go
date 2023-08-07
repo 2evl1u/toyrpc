@@ -1,6 +1,7 @@
 package toyrpc
 
 import (
+	"log"
 	"time"
 
 	"toyrpc/codec"
@@ -25,4 +26,9 @@ var DefaultSettings = Settings{
 type Settings struct {
 	MagicNumber int
 	CodecType   string
+}
+
+func init() {
+	log.SetPrefix("[toyrpc] ")
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
