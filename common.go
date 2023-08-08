@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"toyrpc/codec"
+	"github.com/2evl1u/toyrpc/codec"
 )
 
 const MagicNumber = 0x3bef5c

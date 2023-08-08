@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"toyrpc"
+	"github.com/2evl1u/toyrpc"
 )
 
 func TestRegistry(t *testing.T) {

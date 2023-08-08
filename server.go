@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	. "toyrpc/log"
+	. "github.com/2evl1u/toyrpc/log"
 
-	"toyrpc/codec"
+	"github.com/2evl1u/toyrpc/codec"
 
 	"github.com/pkg/errors"
 )
@@ -186,6 +186,6 @@ func (s *service) heartbeat() {
 		ErrorLogger.Printf("Send heartbeat post request fail: %s\n", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		ErrorLogger.Printf("Heartbeat response err, status code: %s\n", resp.StatusCode)
+		ErrorLogger.Printf("Heartbeat response err, status code: %d\n", resp.StatusCode)
 	}
 }

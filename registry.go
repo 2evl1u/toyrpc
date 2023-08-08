@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	. "toyrpc/log"
+	. "github.com/2evl1u/toyrpc/log"
 )
 
 const (
@@ -59,7 +59,7 @@ func (r *Registry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		aliveServices := r.getAliveServices(serviceName)
 		if err := json.NewEncoder(w).Encode(aliveServices); err != nil {
-			ErrorLogger.Printf("Encode alive services fail:", err)
+			ErrorLogger.Printf("Encode alive services fail: %s\n", err)
 		} else {
 			CommonLogger.Printf("Send service [%s]: %s to %s\n", serviceName, aliveServices, req.RemoteAddr)
 		}
@@ -68,16 +68,16 @@ func (r *Registry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		var b []byte
 		b, err := io.ReadAll(req.Body)
 		if err != nil {
-			ErrorLogger.Printf("Read body fail: ", err)
+			ErrorLogger.Printf("Read body fail: %s\n", err)
 			w.WriteHeader(http.StatusBadRequest)
 			_, err = w.Write([]byte(fmt.Sprintf("read body fail: %s\n", err)))
 			if err != nil {
-				ErrorLogger.Printf("Write fail: ", err)
+				ErrorLogger.Printf("Write fail: %s\n", err)
 			}
 		}
 		var res = new(svcUpdateMapping)
 		if err = json.Unmarshal(b, res); err != nil {
-			ErrorLogger.Printf("Unmarshal body fail: ", err)
+			ErrorLogger.Printf("Unmarshal body fail: %s\n", err)
 			_, _ = w.Write([]byte(fmt.Sprintf("unmarshal body fail: %s\n", err)))
 		}
 		// 获取请求的ip地址

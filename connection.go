@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	. "toyrpc/log"
+	. "github.com/2evl1u/toyrpc/log"
 
-	"toyrpc/codec"
+	"github.com/2evl1u/toyrpc/codec"
 
 	"github.com/pkg/errors"
 )

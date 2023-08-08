@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	. "toyrpc/log"
+	. "github.com/2evl1u/toyrpc/log"
 
 	"github.com/pkg/errors"
 )
